@@ -9,31 +9,36 @@
 //------------------------------------------------------------------------------------------------- 
 
 //-------------------------------------------------------------------------------------------------
+// Defines
+//----------      
+
+// Frame rate that the radar will run at in frames/second
+#define RADAR_FRAME_RATE   2u
+
+// For use of the assert() macro - must be before including assert.h
+#define __ASSERT_USE_STDERR 
+
+//-------------------------------------------------------------------------------------------------
 // Includes
 //----------
 
 #include <assert.h>
+#include <avr/wdt.h>
 #include <Arduino.h>
 #include "RadarIQ.h"
-
-//-------------------------------------------------------------------------------------------------
-// Defines
-//----------
-
-#define __ASSERT_USE_STDERR
-
-#define RADAR_FRAME_RATE   2u
 
 //-------------------------------------------------------------------------------------------------
 // Objects
 //---------
 
+// The RadarIQ object instance
 static RadarIQHandle_t myRadar;
 
 //-------------------------------------------------------------------------------------------------
 // Function Prototypes
 //---------------------
 
+// Callbacks used by the RadarIQ object
 static void callbackSendRadarData(uint8_t * const buffer, const uint16_t len);
 static RadarIQUartData_t callbackReadSerialData(void);
 static void callbackRadarLog(char * const buffer);
@@ -43,6 +48,9 @@ static uint32_t callbackMillis(void);
 // Setup Function
 //-------------------------------------------------------------------------------------------------
 
+/**
+ * This function will run once on power-up or reset of your board
+ */
 void setup()
 {
   // Setup the on-board LED
@@ -124,7 +132,7 @@ void setup()
     Serial.print("* Error setting capture mode of RadarIQ module\n\r");  
   }
   
-  // Set distance filter
+  // Set distance filter from 50mm to 1000mm
   if (RadarIQ_setDistanceFilter(myRadar, 50u, 1000u) == RADARIQ_RETURN_VAL_OK)
   {
     uint16_t dMin, dMax;
@@ -144,7 +152,7 @@ void setup()
     Serial.print("* Error setting distance filter of RadarIQ module\n\r");  
   }
   
-  // Set angle filter
+  // Set angle filter from -45 to 45 degrees
   if (RadarIQ_setAngleFilter(myRadar, -45, 45) == RADARIQ_RETURN_VAL_OK)
   { 
     int8_t angleMin, angleMax;
@@ -163,7 +171,7 @@ void setup()
     Serial.print("* Error setting angle filter of RadarIQ module\n\r");  
   }
   
-  // Set height filter
+  // Set height filter from -100 to 100mm
   if (RadarIQ_setHeightFilter(myRadar, -100, 100) == RADARIQ_RETURN_VAL_OK)
   {
     int16_t heightMin, heightMax;
@@ -182,7 +190,7 @@ void setup()
     Serial.print("* Error setting height filter of RadarIQ module\n\r");  
   }
   
-  // Set sensitivity level
+  // Set sensitivity level to medium
   if (RadarIQ_setSensitivity(myRadar, 6u) == RADARIQ_RETURN_VAL_OK)
   {
     uint8_t sensitivity;
@@ -201,7 +209,7 @@ void setup()
     Serial.print("* Error setting sensitivity level of RadarIQ module\n\r");  
   }
   
-  // Set moving filter option
+  // Set moving filter option to allow moving and static points to be sensed
   if (RadarIQ_setMovingFilter(myRadar, RADARIQ_MOVING_BOTH) == RADARIQ_RETURN_VAL_OK)
   {
     RadarIQMovingFilterMode_t movingFilter;
@@ -230,7 +238,7 @@ void setup()
     Serial.print("* Failed to save radar settings\n\r");    
   }
   
-  // Run a scene calibration
+  // Run a scene calibration to filter out background points
   if (RadarIQ_sceneCalibrate(myRadar) == RADARIQ_RETURN_VAL_OK)
   {
     sprintf(buffer, "* Ran scene calibration successfully\n\r");
@@ -241,7 +249,7 @@ void setup()
     Serial.print("* Failed to run scene calibration\n\r");    
   }
 
-  // Send start capture command
+  // Send start capture command to capture frames continuously
   RadarIQ_start(myRadar, 0);
 }
 
@@ -249,8 +257,12 @@ void setup()
 // Loop Function
 //-------------------------------------------------------------------------------------------------
 
+/**
+ * This function will run repeatedly after the setup() function has run
+ */
 void loop()
 {
+  // Create variables
   char buffer[256];                       // Buffer for debug printing
   static int16_t yMin = 9999;             // Nearest detected point distance from radar
   static int32_t ledPeriod = -1;          // LED blinking period in milliseconds
@@ -272,9 +284,11 @@ void loop()
       // Record time of frame recieved
       radarLastFrameTime = millis();
 
+      // Get a copy of the current radar frame data
       RadarIQData_t radarData;
       RadarIQ_getData(myRadar, &radarData);
 
+      // Find the nearest point to the sensor - along the y axis
       for (uint16_t i = 0u; i < radarData.pointCloud.numPoints; i++)
       {
         if (radarData.pointCloud.points[i].y < yMin)
@@ -282,36 +296,45 @@ void loop()
           yMin = radarData.pointCloud.points[i].y;
         }
       }
-      
+
+      // Print the distance of the nearest point
       sprintf(buffer, "* Distance = %imm\n\r", yMin);
       Serial.print(buffer);
 
       break;    
     } 
-    
+
+    // Ignore all other packet types
     default:
     {
       break;
     }    
   }
 
+  // Check if there is a point less than 1 meter from the sensor
   if (yMin < 1000)
   {
+    // Set the LED blinking period proportionally to the distance
     ledPeriod = yMin + 50;
 
+    // Check if the radar is has sent a frame recently
     if ((millis() - radarLastFrameTime) > (2 * (1000u / RADAR_FRAME_RATE)))
     {
+      // If not, no points are in frame anymore so reset to an out of range value
       yMin = 9999;
     }
   }
+  // If there are no points detected, turn the LED off
   else
   {
     ledPeriod = -1;
     digitalWrite(LED_BUILTIN, 0);
   }
 
+  // Check if the LED should be blinking
   if (ledPeriod >= 0)
   {
+    // Check if it is time to toggle the LED
     if ((millis() - ledLastToggleTime) > ledPeriod)
     {
       digitalWrite(LED_BUILTIN, digitalRead(LED_BUILTIN) ^ 1);
@@ -324,11 +347,17 @@ void loop()
 // Radar Callback Functions
 //--------------------------
 
+/**
+ * This callback function sends a buffer of data to the radar over the serial port
+ */
 static void callbackSendRadarData(uint8_t * const buffer, const uint16_t len)
 {
     Serial1.write(buffer, len);
 }
 
+/**
+ * This callback function checks for and reads data recieved from the radar on the serial port
+ */
 static RadarIQUartData_t callbackReadSerialData()
 { 
   RadarIQUartData_t ret;
@@ -350,11 +379,17 @@ static RadarIQUartData_t callbackReadSerialData()
   return ret;
 }
 
+/**
+ * This callback prints debug log messages created from the RadarIQ object
+ */
 static void callbackRadarLog(char * const buffer)
 {
   Serial.println(buffer);    
 }
 
+/**
+ * This callback function lets the RadarIQ object read the current uptime in milliseconds
+ */
 static uint32_t callbackMillis(void)
 {
   return millis() & 0xFFFFFFFF;
@@ -364,12 +399,19 @@ static uint32_t callbackMillis(void)
 // Assertion Handler
 //-------------------
 
+/**
+ * This funtion will be called if an assert() condition fails
+ * Debug information is printed, then the program will reset by forcing the watchdog to timeout
+ */
 void __assert(const char *__func, const char *__file, int __lineno, const char *__sexp)
 {
+  delay(100);
   char buffer[256];
   sprintf(buffer, "ASSERTION FAILED [%s]: File: %s, Line: %i, Func: %s\n\r", __sexp, __file, __lineno, __func);
   Serial.print(buffer);
-
   delay(100);
-  abort();
+
+  wdt_disable();
+  wdt_enable(WDTO_15MS);
+  while(1);
 }
