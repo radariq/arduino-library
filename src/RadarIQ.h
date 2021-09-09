@@ -35,9 +35,10 @@ extern "C" {
 #define RADARIQ_TX_BUFFER_SIZE             32u       ///< Tx buffer size in bytes
 #define RADARIQ_RX_BUFFER_SIZE             256u      ///< Rx buffer size in bytes
 
-/* Frame data storage sizes */
+/* Data storage sizes */
 #define RADARIQ_MAX_POINTCLOUD             64u       ///< Maximum number of point-cloud points to store in one frame
 #define RADARIQ_MAX_OBJECTS                16u       ///< Maximum number of detected objects to store in one frame
+#define RADARIQ_VERSION_NAME_LEN           20u       ///< Maximum length of string for firmware version names
 
 /* Limits */
 #define RADARIQ_MAX_MESSAGE_STRING         200u      ///< Maximum string length of the message in message packets
@@ -50,10 +51,14 @@ extern "C" {
 #define RADARIQ_MAX_SENSITIVITY            9u        ///< Maximum sensitivity level in point-cloud mode
 #define RADARIQ_MAX_OBJ_SIZE               4u        ///< Maximum target object size in object-tracking mode
 
+/* Debug */
+#define RADARIQ_DEBUG_ENABLE               0         ///< Enables any debug messages printed from RadarIQ.c if set to 1  
+
 /**
  * Assertion macro - redefine if necessary or remove at your own risk
  */
-#define radariq_assert(expr)    assert(expr)
+#define RADARIQ_ASSERT(expr)    assert(expr)
+
 
 //===============================================================================================//
 // DATA TYPES
@@ -83,6 +88,7 @@ typedef enum
     RADARIQ_CMD_IWR_VERSION          = 0x14,        ///< Returns the firmware versions running on the IWR
     RADARIQ_CMD_SCENE_CALIB          = 0x15,        ///< Runs a scene calibration on the device
     RADARIQ_CMD_OBJECT_SIZE          = 0x16,        ///< Sets the target object size for object-tracking mode
+    RADARIQ_CMD_AUTO_START           = 0x17,        ///< Enables the device to auto-start on next boot
     RADARIQ_CMD_CAPTURE_START        = 0x64,        ///< Starts a radar data capture on the device
     RADARIQ_CMD_CAPTURE_STOP         = 0x65,        ///< Stops a radar data capture
     RADARIQ_CMD_PNT_CLOUD_FRAME      = 0x66,        ///< Point-cloud frame data returned from device
@@ -94,12 +100,22 @@ typedef enum
 } RadarIQCommand_t;
 
 /**
+ * UART packet command variants
+ */
+typedef enum
+{
+    RADARIQ_CMD_VAR_REQUEST     = 0,    ///< Requests a response from the device
+    RADARIQ_CMD_VAR_RESPONSE    = 1,    ///< A response sent from the device
+    RADARIQ_CMD_VAR_SET         = 2     ///< Sets a parameter of the device
+} RadarIQCommandVariant_t;
+
+/**
  * Return values for functions
  */
 typedef enum
 {
     RADARIQ_RETURN_VAL_OK = 0,             ///< Function excecuted ok
-    RADARIQ_RETURN_VAL_WARNING = 1,        ///< Value(s) passed to function were out of range and limitted
+    RADARIQ_RETURN_VAL_WARNING = 1,        ///< Value(s) passed to function were out of range and limited
     RADARIQ_RETURN_VAL_ERR = 2             ///< Function returned an error
 } RadarIQReturnVal_t;
 
@@ -190,12 +206,46 @@ typedef struct
 } RadarIQDataObjectTracking_t;
 
 /**
- * Frame data - only one type can be accessed at one time
+ * Types of messages sent from the device in a message packet
+ */
+typedef enum
+{
+    RADARIQ_MSG_TYPE_TEMPORARY     = 0,        ///< Temporary messages not intended to be used permanently
+    RADARIQ_MSG_TYPE_DEBUG         = 1,        ///< Debug information about an operation
+    RADARIQ_MSG_TYPE_INFO          = 2,        ///< General information about an operation
+    RADARIQ_MSG_TYPE_WARNING       = 3,        ///< An operation was completed but not as expected
+    RADARIQ_MSG_TYPE_ERROR         = 4,        ///< An operation was not completed due to an error
+    RADARIQ_MSG_TYPE_SUCCESS       = 5         ///< An operation completed successfully
+} RadarIQMsgType_t;
+
+/**
+ * Types of message codes sent from the device in a message packet
+ */
+typedef enum
+{
+    RADARIQ_MSG_CODE_GENERAL            = 0,    ///< General debug messages with no specific code
+    RADARIQ_MSG_CODE_FRAMERATE_TOO_HIGH = 1,    ///< Requested frame rate was too high and limited
+    RADARIQ_MSG_CODE_CALIB_FAILED       = 2,    ///< Device could not be calibrated
+    RADARIQ_MSG_CODE_IWR_COMMS_TIMEOUT  = 3,    ///< Communications with IWR timed out
+    RADARIQ_MSG_CODE_INVALID_COMMAND    = 100,  ///< Invalid UART command sent to the device
+    RADARIQ_MSG_CODE_INVALID_VALUE      = 101,  ///< Invalid parameter in UART command sent to the device
+} RadarIQMsgCode_t;
+
+typedef struct
+{
+    RadarIQMsgType_t type;
+    uint8_t code;                               ///< Warning/error code or 0 for general debug messages     
+    char message[RADARIQ_MAX_MESSAGE_STRING];   ///< Accesses the string from message packets
+} RadarIQMsg_t;
+
+/**
+ * Data returned from device - only one type can be accessed at one time
  */
 typedef union
 {
     RadarIQDataPointCloud_t pointCloud;                ///< Accesses the point-cloud data struct
     RadarIQDataObjectTracking_t objectTracking;        ///< Accesses the object-tracking data struct
+
 } RadarIQData_t;
 
 /**
@@ -269,10 +319,10 @@ typedef struct
  */
 typedef struct
 {
-    uint8_t major;                  ///< Major version
-    uint8_t minor;                  ///< Minor version
-    uint16_t build;                 ///< Build version
-    char name[20];                  ///< Application name
+    uint8_t major;                          ///< Major version
+    uint8_t minor;                          ///< Minor version
+    uint16_t build;                         ///< Build version
+    char name[RADARIQ_VERSION_NAME_LEN];    ///< Application name
 } RadarIQVersionIWR_t;
 
 /**
@@ -315,7 +365,7 @@ RadarIQCommand_t RadarIQ_readSerial(const RadarIQHandle_t obj);
 
 /* Debug & info */
 uint32_t RadarIQ_getMemoryUsage(void);
-uint8_t RadarIQ_getDataBuffer(const RadarIQHandle_t obj, uint8_t* dest);
+uint16_t RadarIQ_getDataBuffer(const RadarIQHandle_t obj, uint8_t* dest);
 
 /* Data & stats getters */
 void RadarIQ_getData(const RadarIQHandle_t obj, RadarIQData_t * dest);
@@ -329,7 +379,7 @@ void RadarIQ_start(const RadarIQHandle_t obj, const uint8_t numFrames);
 RadarIQReturnVal_t RadarIQ_reset(const RadarIQHandle_t obj, const RadarIQResetCode_t code);
 RadarIQReturnVal_t RadarIQ_save(const RadarIQHandle_t obj);
 RadarIQReturnVal_t RadarIQ_getVersion(const RadarIQHandle_t obj, RadarIQVersion_t * const firmware, RadarIQVersion_t * const hardware);
-RadarIQReturnVal_t RadarIQ_getRadarVersions(const RadarIQHandle_t obj, RadarIQVersionIWR_t * const sbl, RadarIQVersionIWR_t * const app1, RadarIQVersionIWR_t * const app2);
+RadarIQReturnVal_t RadarIQ_getRadarVersions(const RadarIQHandle_t obj, const RadarIQCaptureMode_t mode, RadarIQVersionIWR_t * const version);
 RadarIQReturnVal_t RadarIQ_getSerialNumber(const RadarIQHandle_t obj, RadarIQSerialNo_t * const serial);
 RadarIQReturnVal_t RadarIQ_getFrameRate(const RadarIQHandle_t obj, uint8_t * const rate);
 RadarIQReturnVal_t RadarIQ_setFrameRate(const RadarIQHandle_t obj, uint8_t rate);
@@ -350,6 +400,8 @@ RadarIQReturnVal_t RadarIQ_setHeightFilter(const RadarIQHandle_t obj, int16_t mi
 RadarIQReturnVal_t RadarIQ_sceneCalibrate(const RadarIQHandle_t obj);
 RadarIQReturnVal_t RadarIQ_getObjectSize(const RadarIQHandle_t obj, uint8_t * const size);
 RadarIQReturnVal_t RadarIQ_setObjectSize(const RadarIQHandle_t obj, uint8_t size);
+RadarIQReturnVal_t RadarIQ_getAutoStart(const RadarIQHandle_t obj, uint8_t * const autoStart);
+RadarIQReturnVal_t RadarIQ_setAutoStart(const RadarIQHandle_t obj, const uint8_t autoStart);
 
 #ifdef __cplusplus
 }
