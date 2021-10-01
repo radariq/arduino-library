@@ -1,12 +1,49 @@
 //-------------------------------------------------------------------------------------------------
 //                                                                            				           --
 //                             			RadarIQ C-SDK Demo Application                               --
-//                                         'Backing Sensor'                                 	   --
+//                                         'Proximity Sensor'                                 	   --
 //                   		        (C) 2021 RadarIQ <support@radariq.io>                    			   --
 //                                                                            					         --
 //                            			        License: MIT                                    	   --
 //                                                                            					         --
 //------------------------------------------------------------------------------------------------- 
+
+
+//-------------------------------------------------------------------------------------------------
+// Introduction
+//-------------
+//
+// This Application demostrates the majority of the RadarIQ API commands
+// and demonstrates the ability of the sensor to act as a basic proximity sensor.
+//
+// When the sensor powers on, the sensor is configured with the relevant settings
+// A scene calibration is then run. The purpose of the scene calibration is to remove the effect of
+// any objects which are within 1m of the sensor. This provides a clear environment for the proximity
+// sensing.
+//
+// When an object is moved within 1m of the RadarIQ sensor the onboard LED will begin flashing and the
+// approimate distance of the closest reflection is outptted over serial. The closer the reflection,
+// the faster the LED will blink.
+
+//-------------------------------------------------------------------------------------------------
+// Instructions
+//-------------
+// These instructions are for the Arduino MEGA. Adjust as necessary for other types of Arduino.
+//
+// An external power supply should be connected to the Arduino as the RadarIQ sensor can draw more
+// power than the Arduino can supply off the USB connection alone.
+//
+// Connections:
+// RED = 5V
+// BLACK = GND
+// BLUE = RX1
+// GREEN = TX1
+
+// Place the sensor on a flat surface and power the sensor on.
+// Wave your hand over the sensor and the onboard LED should begin flashing
+//
+// Additional documentation can be found at docs.radariq.io
+//
 
 //-------------------------------------------------------------------------------------------------
 // Defines
