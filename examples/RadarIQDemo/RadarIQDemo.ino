@@ -318,24 +318,31 @@ void loop()
       // Initialise nearest point value to something out of range
       yMin = 9999;
 
-      // Record time of frame recieved
-      radarLastFrameTime = millis();
-
       // Get a copy of the current radar frame data
       RadarIQData_t radarData;
       RadarIQ_getData(myRadar, &radarData);
 
-      // Find the nearest point to the sensor - along the y axis
-      for (uint16_t i = 0u; i < radarData.pointCloud.numPoints; i++)
+      // Check if there were any points detected
+      if (radarData.pointCloud.numPoints)
       {
-        if (radarData.pointCloud.points[i].y < yMin)
+        // Find the nearest point to the sensor - along the y axis
+        for (uint16_t i = 0u; i < radarData.pointCloud.numPoints; i++)
         {
-          yMin = radarData.pointCloud.points[i].y;
+          if (radarData.pointCloud.points[i].y < yMin)
+          {
+            yMin = radarData.pointCloud.points[i].y;
+          }
         }
+
+        sprintf(buffer, "* Distance = %imm\n\r", yMin);
       }
 
-      // Print the distance of the nearest point
-      sprintf(buffer, "* Distance = %imm\n\r", yMin);
+      // Packet had no detected points
+      else
+      {
+        sprintf(buffer, "* No object detected\n\r");
+      }
+
       Serial.print(buffer);
 
       break;    
@@ -353,13 +360,6 @@ void loop()
   {
     // Set the LED blinking period proportionally to the distance
     ledPeriod = yMin + 50;
-
-    // Check if the radar is has sent a frame recently
-    if ((millis() - radarLastFrameTime) > (2 * (1000u / RADAR_FRAME_RATE)))
-    {
-      // If not, no points are in frame anymore so reset to an out of range value
-      yMin = 9999;
-    }
   }
   // If there are no points detected, turn the LED off
   else
