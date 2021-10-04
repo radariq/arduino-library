@@ -86,7 +86,7 @@ void setup()
   RadarIQSerialNo_t serialNo;
   if (RadarIQ_getSerialNumber(myRadar, &serialNo) == RADARIQ_RETURN_VAL_OK)
   {
-    sprintf(buffer, "* Serial number: a = 0x%8x, b = 0x%8x\n\r", serialNo.a, serialNo.b);
+    sprintf(buffer, "* Serial number: a = 0x%x, b = 0x%x\n\r", serialNo.a, serialNo.b);
     Serial.print(buffer);
   }
   else
