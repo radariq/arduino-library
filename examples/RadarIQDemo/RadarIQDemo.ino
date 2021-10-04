@@ -13,7 +13,7 @@
 // Introduction
 //-------------
 //
-// This Application demostrates the majority of the RadarIQ API commands
+// This Application demonstrates the majority of the RadarIQ API commands
 // and demonstrates the ability of the sensor to act as a basic proximity sensor.
 //
 // When the sensor powers on, the sensor is configured with the relevant settings
