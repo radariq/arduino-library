@@ -21,8 +21,8 @@
 // any objects which are within 1m of the sensor. This provides a clear environment for the proximity
 // sensing.
 //
-// When an object is moved within 1m of the RadarIQ sensor the onboard LED will begin flashing and the
-// approimate distance of the closest reflection is outptted over serial. The closer the reflection,
+// When an object is moved within 1m of the RadarIQ sensor the on board LED will begin flashing and the
+// approximate distance of the closest reflection is outputted over serial. The closer the reflection,
 // the faster the LED will blink.
 
 //-------------------------------------------------------------------------------------------------
@@ -30,8 +30,8 @@
 //-------------
 // These instructions are for the Arduino MEGA. Adjust as necessary for other types of Arduino.
 //
-// An external power supply should be connected to the Arduino as the RadarIQ sensor can draw more
-// power than the Arduino can supply off the USB connection alone.
+// An external power supply should be used to DIRECTLY power the RadarIQ sensor because 
+// some Arduinos are not able to supply enough instantaneous current.
 //
 // Connections:
 // RED = 5V
@@ -40,7 +40,7 @@
 // GREEN = TX1
 
 // Place the sensor on a flat surface and power the sensor on.
-// Wave your hand over the sensor and the onboard LED should begin flashing
+// Wave your hand over the sensor and the on board LED should begin flashing
 //
 // Additional documentation can be found at docs.radariq.io
 //
@@ -189,8 +189,8 @@ void setup()
     Serial.print("* Error setting distance filter of RadarIQ module\n\r");  
   }
   
-  // Set angle filter from -45 to 45 degrees
-  if (RadarIQ_setAngleFilter(myRadar, -45, 45) == RADARIQ_RETURN_VAL_OK)
+  // Set angle filter from -20 to 20 degrees
+  if (RadarIQ_setAngleFilter(myRadar, -20, 20) == RADARIQ_RETURN_VAL_OK)
   { 
     int8_t angleMin, angleMax;
     if (RadarIQ_getAngleFilter(myRadar, &angleMin, &angleMax) == RADARIQ_RETURN_VAL_OK)
@@ -208,8 +208,8 @@ void setup()
     Serial.print("* Error setting angle filter of RadarIQ module\n\r");  
   }
   
-  // Set height filter from -100 to 100mm
-  if (RadarIQ_setHeightFilter(myRadar, -100, 100) == RADARIQ_RETURN_VAL_OK)
+  // Set height filter from -200 to 200mm
+  if (RadarIQ_setHeightFilter(myRadar, -200, 200) == RADARIQ_RETURN_VAL_OK)
   {
     int16_t heightMin, heightMax;
     if (RadarIQ_getHeightFilter(myRadar, &heightMin, &heightMax) == RADARIQ_RETURN_VAL_OK)
@@ -228,7 +228,7 @@ void setup()
   }
   
   // Set sensitivity level to medium
-  if (RadarIQ_setSensitivity(myRadar, 6u) == RADARIQ_RETURN_VAL_OK)
+  if (RadarIQ_setSensitivity(myRadar, 7u) == RADARIQ_RETURN_VAL_OK)
   {
     uint8_t sensitivity;
     if (RadarIQ_getSensitivity(myRadar, &sensitivity) == RADARIQ_RETURN_VAL_OK)
