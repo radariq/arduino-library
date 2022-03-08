@@ -119,6 +119,7 @@ static void RadarIQ_encodeHelper(const RadarIQHandle_t obj, uint8_t const databy
 // Packet parsing
 static void RadarIQ_parsePointCloud(const RadarIQHandle_t obj);
 static void RadarIQ_parseObjectTracking(const RadarIQHandle_t obj);
+static void RadarIQ_parseHeatmap(const RadarIQHandle_t obj);
 static void RadarIQ_parseMessage(const RadarIQHandle_t obj);
 static void RadarIQ_parseProcessingStats(const RadarIQHandle_t obj);
 static void RadarIQ_parsePointCloudStats(const RadarIQHandle_t obj);
@@ -385,6 +386,24 @@ void RadarIQ_start(const RadarIQHandle_t obj, const uint8_t numFrames)
 }
 
 /**
+ * Sends a ::RADARIQ_CMD_CAPTURE_STOP packet to the device to stop radar data capture.
+ *
+ * @param obj The RadarIQ object handle returned from RadarIQ_init()
+ */
+void RadarIQ_stop(const RadarIQHandle_t obj)
+{
+    RADARIQ_ASSERT(NULL != obj);
+
+    obj->txPacket.data[0] = RADARIQ_CMD_CAPTURE_STOP;
+    obj->txPacket.data[1] = RADARIQ_CMD_VAR_REQUEST;
+    obj->txPacket.len = 2u;
+
+    RadarIQ_sendPacket(obj);
+}
+
+
+
+/**
  * Sends a ::RADARIQ_CMD_RESET packet to the device to reset the device.
  *
  * @param obj The RadarIQ object handle returned from RadarIQ_init()
@@ -501,7 +520,7 @@ RadarIQReturnVal_t RadarIQ_getRadarVersions(const RadarIQHandle_t obj, const Rad
 
     RadarIQReturnVal_t ret = RADARIQ_RETURN_VAL_OK;
 
-    if ((RADARIQ_MODE_POINT_CLOUD > mode) || (RADARIQ_MODE_OBJECT_TRACKING < mode))
+    if ((RADARIQ_MODE_POINT_CLOUD > mode) || (RADARIQ_MODE_HEAT_MAP < mode))
     {
         ret = RADARIQ_RETURN_VAL_ERR; 
     }
@@ -682,7 +701,7 @@ RadarIQReturnVal_t RadarIQ_setMode(const RadarIQHandle_t obj, RadarIQCaptureMode
 
     RadarIQReturnVal_t ret = RADARIQ_RETURN_VAL_OK;
 
-    if ((RADARIQ_MODE_POINT_CLOUD > mode) || (RADARIQ_MODE_OBJECT_TRACKING < mode))
+    if ((RADARIQ_MODE_POINT_CLOUD > mode) || (RADARIQ_MODE_HEAT_MAP < mode))
     {
         ret = RADARIQ_RETURN_VAL_ERR; 
     }
@@ -1425,6 +1444,11 @@ static RadarIQCommand_t RadarIQ_parsePacket(const RadarIQHandle_t obj)
         RadarIQ_parseObjectTracking(obj);
         break;
     }
+    case RADARIQ_CMD_HEAT_MAP_FRAME:
+    {
+        RadarIQ_parseHeatmap(obj);
+        break;
+    }
     case RADARIQ_CMD_PROC_STATS:
     {
         RadarIQ_parseProcessingStats(obj);
@@ -1501,6 +1525,49 @@ static void RadarIQ_parsePointCloud(const RadarIQHandle_t obj)
         {
             obj->data.pointCloud.isFrameComplete = true;
         }
+    }
+}
+
+/**
+ * Parses a point-cloud packet received from the device UART.
+ *
+ * @param obj The RadarIQ object handle returned from RadarIQ_init()
+ */
+static void RadarIQ_parseHeatmap(const RadarIQHandle_t obj)
+{
+    RadarIQCommand_t ret = RADARIQ_CMD_NONE;
+
+    const RadarIQSubframe_t subFrameType = (RadarIQSubframe_t)obj->rxPacket.data[2];
+    uint16_t pointCount = obj->rxPacket.data[3];
+    obj->data.heatMap.isFrameComplete = false;
+    obj->data.heatMap.numPoints = pointCount;
+    obj->data.heatMap.heatMapSize = RadarIQ_pack16Unsigned(&obj->rxPacket.data[5]);
+    uint8_t packetIdx = 8u;
+
+    // Loop through points in packet
+    uint8_t pointNum;
+    for (pointNum = 0u; pointNum < pointCount; pointNum++)
+    {
+        RADARIQ_ASSERT((RADARIQ_RX_BUFFER_SIZE - 4u) > packetIdx);
+      
+        obj->data.heatMap.points[obj->numDataPoints].real = RadarIQ_pack16Signed(&obj->rxPacket.data[packetIdx]);
+        packetIdx += 2u;
+        obj->data.heatMap.points[obj->numDataPoints].imaginary = RadarIQ_pack16Signed(&obj->rxPacket.data[packetIdx]);
+        packetIdx += 2u;
+
+        obj->numDataPoints++;
+        obj->data.heatMap.numPoints = obj->numDataPoints;
+        if (RADARIQ_MAX_HEATMAP == obj->numDataPoints)
+        {
+            obj->numDataPoints = 0u;
+            break;
+        }
+    }
+
+    if (RADARIQ_MAX_HEATMAP == obj->data.heatMap.numPoints)
+    {
+        obj->numDataPoints = 0u;
+        obj->data.heatMap.isFrameComplete = true;
     }
 }
 
@@ -1694,7 +1761,7 @@ static RadarIQReturnVal_t RadarIQ_decodePacket(const RadarIQHandle_t obj)
     {
         if(obj->rxPacket.len >= (RADARIQ_RX_BUFFER_SIZE - 1u))
         {
-            return false;
+            return RADARIQ_RETURN_VAL_ERR;
         }
 
         switch (*(obj->rxBuffer.data + srcIdx))

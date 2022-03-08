@@ -38,6 +38,7 @@ extern "C" {
 /* Data storage sizes */
 #define RADARIQ_MAX_POINTCLOUD             64u       ///< Maximum number of point-cloud points to store in one frame
 #define RADARIQ_MAX_OBJECTS                16u       ///< Maximum number of detected objects to store in one frame
+#define RADARIQ_MAX_HEATMAP                512u
 #define RADARIQ_VERSION_NAME_LEN           20u       ///< Maximum length of string for firmware version names
 
 /* Limits */
@@ -94,7 +95,7 @@ typedef enum
     RADARIQ_CMD_PNT_CLOUD_FRAME      = 0x66,        ///< Point-cloud frame data returned from device
     RADARIQ_CMD_OBJ_TRACKING_FRAME   = 0x67,        ///< Object-tracking frame data returned from device
     RADARIQ_CMD_PROC_STATS           = 0x68,        ///< Processing statistics returned from device
-    RADARIQ_CMD_RAW_DATA             = 0x69,        ///< Raw data frame data returned from device
+    RADARIQ_CMD_HEAT_MAP_FRAME       = 0x69,        ///< Heatmap frame data returned from device
     RADARIQ_CMD_POINTCLOUD_STATS     = 0x70,        ///< Point-cloud statistics returned from device
     RADARIQ_CMD_POWER_STATUS         = 0x71         ///< Power ok flag returned from device
 } RadarIQCommand_t;
@@ -126,6 +127,7 @@ typedef enum
 {
     RADARIQ_MODE_POINT_CLOUD = 0,         ///< Point-cloud capture mode
     RADARIQ_MODE_OBJECT_TRACKING = 1,     ///< Object-tracking capture mode
+    RADARIQ_MODE_HEAT_MAP = 2,            ///< Heat-map mode
 }RadarIQCaptureMode_t;
 
 /**
@@ -205,6 +207,27 @@ typedef struct
     RadarIQDataObject_t objects[RADARIQ_MAX_OBJECTS];    ///< Array to store the detected objects data
 } RadarIQDataObjectTracking_t;
 
+
+/**
+ * Heatmap data point
+ */
+typedef struct
+{
+    int16_t real;                        ///< The point's real component
+    int16_t imaginary;                   ///< The point's imaginary component
+} RadarIQHeatmapDataPoint_t;
+
+/**
+ * heatmap data frame
+ */
+typedef struct
+{
+    bool isFrameComplete;            ///< Indicates whether a frame is complete or has points truncated to fit max storage    
+    uint16_t numPoints;              ///< Indicates number of points in the frame
+    uint16_t heatMapSize;
+    RadarIQHeatmapDataPoint_t points[RADARIQ_MAX_HEATMAP];    ///< Array to store the points data
+} RadarIQDataHeatmap_t;
+
 /**
  * Types of messages sent from the device in a message packet
  */
@@ -245,7 +268,7 @@ typedef union
 {
     RadarIQDataPointCloud_t pointCloud;                ///< Accesses the point-cloud data struct
     RadarIQDataObjectTracking_t objectTracking;        ///< Accesses the object-tracking data struct
-
+    RadarIQDataHeatmap_t heatMap;
 } RadarIQData_t;
 
 /**
@@ -376,6 +399,7 @@ bool RadarIQ_isPowerGood(const RadarIQHandle_t obj);
 
 /* UART commands */
 void RadarIQ_start(const RadarIQHandle_t obj, const uint8_t numFrames);
+void RadarIQ_stop(const RadarIQHandle_t obj);
 RadarIQReturnVal_t RadarIQ_reset(const RadarIQHandle_t obj, const RadarIQResetCode_t code);
 RadarIQReturnVal_t RadarIQ_save(const RadarIQHandle_t obj);
 RadarIQReturnVal_t RadarIQ_getVersion(const RadarIQHandle_t obj, RadarIQVersion_t * const firmware, RadarIQVersion_t * const hardware);
