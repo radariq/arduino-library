@@ -1,7 +1,7 @@
 //-------------------------------------------------------------------------------------------------
 //                                                                            				           --
 //                             			RadarIQ C-SDK Demo Application                               --
-//                                         'Proximity Sensor'                                 	   --
+//                                            'Heat-Map'                                 	       --
 //                   		        (C) 2021 RadarIQ <support@radariq.io>                    			   --
 //                                                                            					         --
 //                            			        License: MIT                                    	   --
@@ -12,18 +12,7 @@
 //-------------------------------------------------------------------------------------------------
 // Introduction
 //-------------
-//
-// This Application demonstrates the majority of the RadarIQ API commands
-// and demonstrates the ability of the sensor to act as a basic proximity sensor.
-//
-// When the sensor powers on, the sensor is configured with the relevant settings
-// A scene calibration is then run. The purpose of the scene calibration is to remove the effect of
-// any objects which are within 1m of the sensor. This provides a clear environment for the proximity
-// sensing.
-//
-// When an object is moved within 1m of the RadarIQ sensor the on board LED will begin flashing and the
-// approximate distance of the closest reflection is outputted over serial. The closer the reflection,
-// the faster the LED will blink.
+
 
 //-------------------------------------------------------------------------------------------------
 // Instructions
@@ -53,7 +42,10 @@
 #define RADAR_FRAME_RATE   8u
 
 // For use of the assert() macro - must be before including assert.h
-#define __ASSERT_USE_STDERR 
+#define __ASSERT_USE_STDERR
+
+#define HEATMAP_PRINT_BUFFER_SIZE 256u  ///< Size of string for printing points
+#define HEATMAP_POINTS_PER_PRINT  25u   ///< Number of points allowed in string (allows 10 chars per real+imag point)
 
 //-------------------------------------------------------------------------------------------------
 // Includes
@@ -165,35 +157,50 @@ void loop()
   static int32_t ledPeriod = -1;          // LED blinking period in milliseconds
   static int32_t ledLastToggleTime = 0;   // Last time the LED was toggled in milliseconds
   static int32_t radarLastFrameTime = 0;  // Last time a point-cloud frame was recieved in millisecons
+  static bool framePrinted;
 
   // Process the serial data
   RadarIQCommand_t packet = RadarIQ_readSerial(myRadar);
-  
-  // Check recieved packet type
-  switch (packet)
-  {
-    // Pointcloud frame
-    case RADARIQ_CMD_HEAT_MAP_FRAME:
-    {
-      // Get a copy of the current radar frame data
-      RadarIQData_t radarData;
-      RadarIQ_getData(myRadar, &radarData);
-      
-      Serial.print("Frame ");
-      Serial.println(radarData.heatMap.numPoints);
 
-      if (radarData.heatMap.isFrameComplete)
+  // Check recieved packet type
+  if ((packet == RADARIQ_CMD_HEAT_MAP_FRAME) && (!framePrinted))
+  { 
+    // Get a copy of the current radar frame data
+    RadarIQData_t radarData;
+    RadarIQ_getData(myRadar, &radarData);
+
+    // Print all frame data at end of frame
+    if (radarData.heatMap.isFrameComplete)
+    {    
+      Serial.println("FRAME READY");
+
+      char pointBuffer[16];
+      char publishBuffer[HEATMAP_PRINT_BUFFER_SIZE];
+      memset(publishBuffer, 0, sizeof(publishBuffer));  
+
+      uint32_t point;
+      for (point = 0u; point < RADARIQ_MAX_HEATMAP; point++)
       {
-        Serial.print("DONE ");
-        Serial.println(radarData.heatMap.heatMapSize);
+        sprintf(pointBuffer, "%i,%i,", radarData.heatMap.points[point].real, radarData.heatMap.points[point].imaginary);
+        strcat(publishBuffer, pointBuffer);
+
+        // Check if correct number of points to print line
+        if ((point % HEATMAP_POINTS_PER_PRINT) == (HEATMAP_POINTS_PER_PRINT - 1u))
+        {
+          Serial.println(publishBuffer);
+          memset(publishBuffer, 0, sizeof(publishBuffer)); 
+        }
       }
 
+      // Check if there are remaining points to print
+      if ((point % HEATMAP_POINTS_PER_PRINT) != (HEATMAP_POINTS_PER_PRINT - 1u))
+      {
+        Serial.println(publishBuffer);
+        memset(publishBuffer, 0, sizeof(publishBuffer)); 
+      }
+
+      framePrinted = true;
     }
-    // Ignore all other packet types
-    default:
-    {
-      break;
-    }    
   }
 }
 
